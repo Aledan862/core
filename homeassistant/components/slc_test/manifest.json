@@ -4,5 +4,5 @@
   "documentation": "",
   "dependencies": [],
   "codeowners": [],
-  "requirements": []
+  "requirements": ["requests==2.23.0", "asyncio_dgram==1.0.1"]
 }

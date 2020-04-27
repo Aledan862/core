@@ -1,120 +1,103 @@
-"""Platform for sensor integration."""
+"""Support sensor integration."""
 import logging
-import voluptuous as vol
-# from RPi import GPIO
-from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, BinarySensorDevice
-# from homeassistant.components import rpi_gpio
-# from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.dispatcher import dispatcher_send, async_dispatcher_connect
-import homeassistant.helpers.config_validation as cv
-from homeassistant.core import callback
-# import asyncio
-# import board
-# import busio
+
+from homeassistant.helpers.entity import Entity
+from homeassistant.const import (
+    STATE_ON, STATE_OFF, STATE_UNAVAILABLE)
+# Import the device class from the component that you want to support
+# from homeassistant.const import CONF_HOST
+
+from .const import (
+    EVENT,
+    SINGLE,
+    DOUBLE,
+    TRIPLE,
+    LONG)
+
 
 _LOGGER = logging.getLogger(__name__)
 
-SIGNAL_UPDATE_ENTITY = "my_custom_component_update_{}"
-
-CONF_PIN = "pin"
-CONF_ADDRESS = "address"
-
-DEFAULT_ADDRESS = 0x10
-DEFAULT_INTERRUPT_PIN = 17
-
-_SENSORS_SCHEMA = vol.Schema({cv.positive_int: cv.string})
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_PIN): _SENSORS_SCHEMA,
-        vol.Optional(CONF_ADDRESS, default=DEFAULT_ADDRESS): vol.Coerce(int),
-    }
-)
-
-UPDATE_MESSAGE_SCHEMA = vol.Schema(
-    {vol.Required("number"): cv.positive_int, vol.Required("state"): cv.positive_int}
-)
-
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the sensor platform."""
-    pins = config.get(CONF_PIN)
-    # address = config.get(CONF_ADDRESS)
+    """Set up the sensors"""
+    _LOGGER.info("SLC Sensor started!")
+    sensors = []
 
-    sensor_data = dict()
+    for channel in range(1, 24):
+        name = "DI" + str(channel)
+        new_sensor = SLCSensor(name, "DI", channel, hass)
+        hass.bus.async_listen(EVENT, new_sensor.event_handler)
+        sensors.append(new_sensor)
 
-    def read_initial_input(hass, port):
-        # send_buf_initial = [0xee, port]
-        # rec_buf_initial = []
-        #
-        # i2c.writeto_then_readfrom(DEFAULT_ADDRESS, bytes(send_buf_initial),
-        #                           bytes(rec_buf_initial))
-        #
-        # sensor_data[port] = (rec_buf_initial[0] & 0x01)
-        #
-        # return sensor_data[port]
-        return 1
+    for channel in range(1, 8):
+        name = "AI" + str(channel)
+        new_sensor = SLCSensor(name, "AI", channel, hass)
+        hass.bus.async_listen(EVENT, new_sensor.event_handler)
+        sensors.append(new_sensor)
 
-    @callback
-    def read_input(service):
-        """Read a value from a GPIO."""
-        # send_buf = [0xff]
-        # rec_buf = []
-        #
-        # i2c.writeto_then_readfrom(DEFAULT_ADDRESS, bytes(send_buf), bytes(rec_buf))
-        #
-        pin_number = service.data["number"]
-        pin_state = service.data["state"]
+    ibutton_sensor = SLCSensor("IButton", "IBTN", 1, hass)
+    hass.bus.async_listen(EVENT, ibutton_sensor.event_handler)
+    sensors.append(ibutton_sensor)
 
-        sensor_data[pin_number] = pin_state
-
-        dispatcher_send(hass, SIGNAL_UPDATE_ENTITY.format(pin_number))
-
-    # GPIO.setup(DEFAULT_INTERRUPT_PIN, GPIO.IN, GPIO.PUD_UP)
-    # GPIO.add_event_detect(DEFAULT_INTERRUPT_PIN, GPIO.FALLING, callback=read_input,
-    #                       bouncetime=50)
-    hass.services.async_register(
-        "shs_bs", "update", read_input, schema=UPDATE_MESSAGE_SCHEMA
-    )
-
-    binary_sensors = []
-    for pin_num, pin_name in pins.items():
-        sensor_data[pin_num] = read_initial_input(hass, pin_num)
-        binary_sensors.append(SHS_bs(pin_name, pin_num, sensor_data))
-
-    async_add_entities(binary_sensors, True)
+    async_add_entities(sensors)
+    return True
 
 
-class SHS_bs(BinarySensorDevice):
+class SLCSensor(Entity):
     """Representation of a Sensor."""
 
-    def __init__(self, name, pin, sensor_data):
+    def __init__(self, name, sensortyp, channel, hass):
         """Initialize the sensor."""
+        self._state = STATE_UNAVAILABLE
         self._name = name
-        self._pin = pin
-        self._sensor_data = sensor_data
-        self._state = None
-        self._remove_signal_update = None
+        self._channel = channel
+        self._hass = hass
+        self._sensortyp = sensortyp
+        self._format = None
+        self._unit_of_measurement = None
+        self._on_state = STATE_ON
+        self._off_state = STATE_OFF
 
-    @property
-    def is_on(self):
-        """Return true if the binary sensor is on."""
-        return self._state
+    async def event_handler(self, event):
+        if self._sensortyp == event.data["Channel"]:
+            if (self._sensortyp == "AI") and (self._channel == int(event.data["Number"])):
+                self._state = round(float(event.data["Value"]), 1)
+            elif self._sensortyp == "DI" and (self._channel == int(event.data["Number"])):
+                val = int(event.data["Value"])
+                # _LOGGER.debug(val)
+                if val == 0:
+                    self._state = self._off_state
+                else:
+                    if val == 1:
+                        click_type = SINGLE
+                    elif val == 2:
+                        click_type = DOUBLE
+                    elif val == 3:
+                        click_type = TRIPLE
+                    elif val == 7:
+                        self._state = self._on_state
+                        click_type = LONG
+                    else:
+                        _LOGGER.warning("Unsupported click_type detected: %s", val)
+                        return
+                    self._hass.bus.fire(
+                        EVENT + ".click",
+                        {"entity_id": self._name, "click_type": click_type},
+                    )
+            elif self._sensortyp == "IBTN":
+                _LOGGER.debug("ibutton")
+                if int(event.data["Number"]) == 1:
+                    self._hass.bus.fire(
+                        EVENT + ".alarm",
+                        {"entity_id": self._name, "state": "correct"},
+                    )
+                elif int(event.data["Number"]) == -1:
+                    self._hass.bus.fire(
+                        EVENT + ".alarm",
+                        {"entity_id": self._name, "state": "wrong"},
+                    )
 
-    async def async_added_to_hass(self):
-        """Call when entity is added to hass."""
-        self._remove_signal_update = async_dispatcher_connect(
-            self.hass, SIGNAL_UPDATE_ENTITY.format(self._pin), self._update_callback
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Call when entity will be removed from hass."""
-        self._remove_signal_update()
-
-    @callback
-    def _update_callback(self):
-        """Call update method."""
-        self.async_schedule_update_ha_state(True)
+            self.schedule_update_ha_state()
 
     @property
     def name(self):
@@ -123,10 +106,31 @@ class SHS_bs(BinarySensorDevice):
 
     @property
     def should_poll(self):
-        """No polling needed."""
         return False
 
-    async def async_update(self):
-        """Fetch new state data for the sensor."""
-        if self._pin in self._sensor_data:
-            self._state = self._sensor_data[self._pin]
+    @property
+    def state(self):
+        """Return the state of the sensor."""
+        if self._format is not None:
+            try:
+                return self._format % self._state
+            except ValueError:
+                return self._state
+        else:
+            return self._state
+
+    @property
+    def unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return self._unit_of_measurement
+
+    @property
+    def device_state_attributes(self):
+        """Return device specific state attributes.
+
+        Implemented by platform classes.
+        """
+        return {"device_typ": self._sensortyp + "_sensor",
+                "channel_number": self._channel,
+                "platform": "slc",
+                "show_last_changed": "true"}
