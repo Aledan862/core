@@ -25,7 +25,10 @@ from homeassistant.components.light import (
 )
 
 from . import SLCLink
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    SLC_SYNC
+)
 
 DEVICE_SCHEMA = vol.Schema(
     {
@@ -77,6 +80,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
             light = SLCRGB(name, device_id, channel, slclink)
         # elif device_type == "DMXRGBW":
         #     light = SLCRGBW(name, device_id, channel, slclink)
+        hass.bus.async_listen(SLC_SYNC, light.event_handler)
         lights.append(light)
     # if len(lights) == 0:
     # # Config is empty so generate a default set of dimmers
@@ -102,10 +106,18 @@ class SLCLight(Light):
         self._brightness = 255
         self._slclink = slclink
 
+        msg = "DMX:%d:0#" % (self._channel)
+        self._slclink.send_not_reliable_message(msg)
+
     @property
     def name(self):
         """Return the display name of this light."""
         return self._name
+
+    @property
+    def unique_id(self) -> str:
+        """Return a unique ID."""
+        return f"DMX{self._channel}"
 
     @property
     def supported_features(self):
@@ -130,6 +142,11 @@ class SLCLight(Light):
     def is_on(self):
         """Return true if light is on."""
         return self._state
+
+    async def event_handler(self, event):
+        if self._state:
+            msg = "DMX:%d:%d#" % (self._channel, self._brightness)
+            self._slclink.send_not_reliable_message(msg)
 
     async def async_turn_on(self, **kwargs):
         """ Turn the light on. """
@@ -165,13 +182,21 @@ class SLCRGB(Light):
         self._channel = channel
         self._state = None
         self._slclink = slclink
-        self._brightness = 0
+        self._brightness = 255
         self._hs_color = (0, 0)
+
+        msg = "DMXRGB:%d:0,0,0#" % (self._channel)
+        self._slclink.send_not_reliable_message(msg)
 
     @property
     def name(self):
         """Return the display name of this light."""
         return self._name
+
+    @property
+    def unique_id(self) -> str:
+        """Return a unique ID."""
+        return f"DMX{self._channel}"
 
     @property
     def supported_features(self):
@@ -201,12 +226,16 @@ class SLCRGB(Light):
         """Return true if light is on."""
         return self._state
 
+    async def event_handler(self, event):
+        if self._state:
+            msg = "DMX:%d:%d#" % (self._channel, self._brightness)
+            self._slclink.send_not_reliable_message(msg)
+
     async def async_turn_on(self, **kwargs):
         """ Turn the light on. """
         self._state = True
         msg = ""
         rgb_color = (0, 0, 0)
-        _LOGGER.info(kwargs)
 
         h, s = self._hs_color
         brightness = self._brightness

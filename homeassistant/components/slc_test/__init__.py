@@ -12,12 +12,17 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.discovery import async_load_platform
+# from homeassistant.helpers.entity_registry import (
+#     async_get_registry,
+#     EntityRegistry
+# )
 
 from .const import (
     DOMAIN,
     DEFAULT_PORT,
     EVENT,
-    SLC_START
+    SLC_START,
+    SLC_SYNC
 )
 from homeassistant.const import (
     CONF_HOST,
@@ -86,17 +91,23 @@ async def async_setup(hass: HomeAssistant, config: dict):
     slc = SLCclient(host="192.168.100.158", controllerip=controllerip)
 
     async def message_callback(event_type, message):
-        if event_type < 4:
+        if event_type == 2:
             hass.bus.async_fire(SLC_START, message)
-        else:
+        elif event_type == 3:
+            hass.bus.async_fire(SLC_SYNC, message)
+        elif event_type == 4:
             hass.bus.async_fire(EVENT, message)
 
     async def connect_handler(event):
-        _LOGGER.info(type(event.data))
         if event.data["State"] == "CONNECTING":
+            # registry = await async_get_registry(hass)
+            # idList = hass.states.async_entity_ids("switch") + hass.states.async_entity_ids("light")
+            # for e in idList:
+            #     if registry.async_get(e):
+            #         if registry.async_get(e).platform == DOMAIN:
+            #             _LOGGER.debug(registry.async_get(e))
+
             await slc.connect(event.data)
-            # hass.states.async_entity_ids(domain_filter=DOMAIN)
-            _LOGGER.debug(hass.states.async_entity_ids(domain_filter=DOMAIN))
 
     async def start_slc_rio(event):
         await slc.start()
@@ -168,7 +179,7 @@ class SLCLink:
     def send_not_reliable_message(self, msg):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Internet  # UDP
         sock.sendto(msg.encode(), (SLCLink.link_ip, SLCLink.TX_PORT))
-        _LOGGER.info(msg)
+        _LOGGER.debug("Send data: %s", msg)
         return True
 
 
