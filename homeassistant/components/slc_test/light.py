@@ -35,7 +35,7 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Required(CONF_NAME): cv.string,
         vol.Required("type"): vol.In(["DMX", "DMXRGB", "DMXRGBW"]),
         vol.Required("channel"): cv.byte,
-        vol.Optional("dmxin", default=None): cv.byte,
+        vol.Optional("dmxin", default=0): cv.byte,
     }
 )
 
@@ -109,6 +109,8 @@ class SLCLight(Light):
         self._state = None
         self._brightness = 255
         self._slclink = slclink
+
+        self.entity_id = f"light.{self._device_id}"
 
         msg = "DMX:%d:0#" % (self._channel)
         self._slclink.send_not_reliable_message(msg)
@@ -190,6 +192,8 @@ class SLCRGB(Light):
         self._brightness = 255
         self._hs_color = (0, 0)
         self._dmxin = dmxin_channel
+
+        self.entity_id = f"light.{self._device_id}"
 
         msg = "DMXRGB:%d:0,0,0#" % (self._channel)
         self._slclink.send_not_reliable_message(msg)

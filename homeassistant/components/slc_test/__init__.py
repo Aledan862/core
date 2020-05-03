@@ -51,7 +51,8 @@ CONFIG_SCHEMA = vol.Schema(
 
 # TODO List the platforms that you want to support.
 # For your initial PR, limit it to 1 platform.
-PLATFORMS = ["light", "switch", "sensor"]
+# PLATFORMS = ["light", "switch", "sensor"]
+PLATFORMS = ["switch", "sensor"]
 _LOGGER = logging.getLogger(__name__)
 
 
