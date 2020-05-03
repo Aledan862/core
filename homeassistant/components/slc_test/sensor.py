@@ -23,13 +23,13 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     _LOGGER.info("SLC Sensor started!")
     sensors = []
 
-    for channel in range(1, 24):
+    for channel in range(1, 25):
         name = "DI" + str(channel)
         new_sensor = SLCSensor(name, "DI", channel, hass)
         hass.bus.async_listen(EVENT, new_sensor.event_handler)
         sensors.append(new_sensor)
 
-    for channel in range(1, 8):
+    for channel in range(1, 9):
         name = "AI" + str(channel)
         new_sensor = SLCSensor(name, "AI", channel, hass)
         hass.bus.async_listen(EVENT, new_sensor.event_handler)

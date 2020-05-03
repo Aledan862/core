@@ -1,6 +1,5 @@
 """Platform for light integration."""
 import logging
-
 # import asyncio
 # import queue
 # import threading
@@ -27,7 +26,8 @@ from homeassistant.components.light import (
 from . import SLCLink
 from .const import (
     DOMAIN,
-    SLC_SYNC
+    SLC_SYNC,
+    EVENT,
 )
 
 DEVICE_SCHEMA = vol.Schema(
@@ -35,6 +35,7 @@ DEVICE_SCHEMA = vol.Schema(
         vol.Required(CONF_NAME): cv.string,
         vol.Required("type"): vol.In(["DMX", "DMXRGB", "DMXRGBW"]),
         vol.Required("channel"): cv.byte,
+        vol.Optional("dmxin", default=None): cv.byte,
     }
 )
 
@@ -74,13 +75,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         name = device_config[CONF_NAME]
         channel = device_config["channel"]
         device_type = device_config["type"]
+        dmxin_channel = device_config["dmxin"]
         if device_type == "DMX":
             light = SLCLight(name, device_id, channel, slclink)
         elif device_type == "DMXRGB":
-            light = SLCRGB(name, device_id, channel, slclink)
-        # elif device_type == "DMXRGBW":
-        #     light = SLCRGBW(name, device_id, channel, slclink)
-        hass.bus.async_listen(SLC_SYNC, light.event_handler)
+            light = SLCRGB(name, device_id, channel, slclink, dmxin_channel)
+            hass.bus.async_listen(EVENT, light.event_handler)
+        elif device_type == "DMXRGBW":
+            light = SLCRGBW(name, device_id, channel, slclink, dmxin_channel)
+            hass.bus.async_listen(EVENT, light.event_handler)
+        hass.bus.async_listen(SLC_SYNC, light.sync_event_handler)
         lights.append(light)
     # if len(lights) == 0:
     # # Config is empty so generate a default set of dimmers
@@ -126,7 +130,7 @@ class SLCLight(Light):
 
     @property
     def should_poll(self):
-        """ No polling needed for a LightWave light. """
+        """ No polling needed for a light. """
         return False
 
     @property
@@ -143,7 +147,8 @@ class SLCLight(Light):
         """Return true if light is on."""
         return self._state
 
-    async def event_handler(self, event):
+    async def sync_event_handler(self, event):
+        """ Send current saved state in HA to controller when it started. """
         if self._state:
             msg = "DMX:%d:%d#" % (self._channel, self._brightness)
             self._slclink.send_not_reliable_message(msg)
@@ -175,7 +180,7 @@ class SLCLight(Light):
 class SLCRGB(Light):
     """ Provides a SLC RGB light. """
 
-    def __init__(self, name, device_id, channel, slclink):
+    def __init__(self, name, device_id, channel, slclink, dmxin_channel=0):
         """Initialize an SLCLight."""
         self._name = name
         self._device_id = device_id
@@ -184,6 +189,7 @@ class SLCRGB(Light):
         self._slclink = slclink
         self._brightness = 255
         self._hs_color = (0, 0)
+        self._dmxin = dmxin_channel
 
         msg = "DMXRGB:%d:0,0,0#" % (self._channel)
         self._slclink.send_not_reliable_message(msg)
@@ -226,10 +232,27 @@ class SLCRGB(Light):
         """Return true if light is on."""
         return self._state
 
-    async def event_handler(self, event):
+    async def sync_event_handler(self, event):
         if self._state:
             msg = "DMX:%d:%d#" % (self._channel, self._brightness)
             self._slclink.send_not_reliable_message(msg)
+
+    async def event_handler(self, event):
+        """ Change state provided by new event from DMXIN """
+        msg = ""
+        if (event.data["Channel"] == "DMXIN"):
+            if (self._dmxin == int(event.data["Number"])):
+                rgbw_color = event.data["Value"].strip().split(',')
+                msg = "DMXRGB:%d:%d,%d,%d#" % (
+                    self._channel,
+                    rgbw_color[0],
+                    rgbw_color[1],
+                    rgbw_color[2],
+                    # rgbw_color[3],
+                )
+
+        self._slclink.send_not_reliable_message(msg)
+        self.async_schedule_update_ha_state()
 
     async def async_turn_on(self, **kwargs):
         """ Turn the light on. """
