@@ -243,26 +243,29 @@ class SLCRGB(Light):
 
     async def event_handler(self, event):
         """ Change state provided by new event from DMXIN """
-        msg = ""
         if (event.data["Channel"] == "DMXIN"):
             if (self._dmxin == int(event.data["Number"])):
-                rgbw_color = event.data["Value"].strip().split(',')
-                msg = "DMXRGB:%d:%d,%d,%d#" % (
-                    self._channel,
-                    rgbw_color[0],
-                    rgbw_color[1],
-                    rgbw_color[2],
-                    # rgbw_color[3],
-                )
+                r, g, b, w = event.data["Value"].strip().split(',')
+                r = int(r)
+                g = int(g)
+                b = int(b)
+                w = int(w)
 
-        self._slclink.send_not_reliable_message(msg)
+        r, g, b = color_util.color_rgbw_to_rgb(r, g, b, w)
+
+        self._slclink.send_not_reliable_message(f"DMXRGB:{self._channel}:{r},{g},{b}#")
+        self._hs_color = color_util.color_RGB_to_hs(r, g, b)
+
+        if r == g == b == 0:
+            self._state = False
+        else:
+            self._state = True
+
         self.async_schedule_update_ha_state()
 
     async def async_turn_on(self, **kwargs):
         """ Turn the light on. """
         self._state = True
-        msg = ""
-        rgb_color = (0, 0, 0)
 
         h, s = self._hs_color
         brightness = self._brightness
@@ -273,16 +276,9 @@ class SLCRGB(Light):
         elif ATTR_HS_COLOR in kwargs:
             h, s = self._hs_color = (kwargs[ATTR_HS_COLOR][0], kwargs[ATTR_HS_COLOR][1])
 
-        rgb_color = color_RGB_and_brightness_to_RGB(brightness, color_util.color_hs_to_RGB(h, s))
+        r, g, b = color_RGB_and_brightness_to_RGB(brightness, color_util.color_hs_to_RGB(h, s))
 
-        msg = "DMXRGB:%d:%d,%d,%d#" % (
-            self._channel,
-            rgb_color[0],
-            rgb_color[1],
-            rgb_color[2],
-        )
-
-        self._slclink.send_not_reliable_message(msg)
+        self._slclink.send_not_reliable_message(f"DMXRGB:{self._channel}:{r},{g},{b}#")
         self.async_schedule_update_ha_state()
 
     async def async_turn_off(self, **kwargs):
@@ -298,14 +294,31 @@ class SLCRGB(Light):
 class SLCRGBW(SLCRGB):
     """ Provides a SLC RGBW light. """
 
+    async def event_handler(self, event):
+        """ Change state provided by new event from DMXIN """
+        if (event.data["Channel"] == "DMXIN"):
+            if (self._dmxin == int(event.data["Number"])):
+                r, g, b, w = event.data["Value"].strip().split(',')
+                r = int(r)
+                g = int(g)
+                b = int(b)
+                w = int(w)
+
+        self._slclink.send_not_reliable_message(f"DMXRGBW:{self._channel}:{r},{g},{b},{w}#")
+
+        r, g, b = color_util.color_rgbw_to_rgb(r, g, b, w)
+        self._hs_color = color_util.color_RGB_to_hs(r, g, b)
+
+        if r == g == b == w == 0:
+            self._state = False
+        else:
+            self._state = True
+
+        self.async_schedule_update_ha_state()
+
     async def async_turn_on(self, **kwargs):
         """ Turn the light on. """
         self._state = True
-        msg = ""
-        rgb_color = (0, 0, 0)
-        rgbw_color = (0, 0, 0, 0)
-
-        _LOGGER.info(kwargs)
 
         h, s = self._hs_color
         brightness = self._brightness
@@ -316,18 +329,10 @@ class SLCRGBW(SLCRGB):
         elif ATTR_HS_COLOR in kwargs:
             h, s = self._hs_color = (kwargs[ATTR_HS_COLOR][0], kwargs[ATTR_HS_COLOR][1])
 
-        rgb_color = color_RGB_and_brightness_to_RGB(brightness, color_util.color_hs_to_RGB(h, s))
-        rgbw_color = color_util.color_rgb_to_rgbw(rgb_color[0], rgb_color[1], rgb_color[2])
+        r, g, b = color_RGB_and_brightness_to_RGB(brightness, color_util.color_hs_to_RGB(h, s))
+        r, g, b, w = color_util.color_rgb_to_rgbw(r, g, b)
 
-        msg = "DMXRGBW:%d:%d,%d,%d#" % (
-            self._channel,
-            rgbw_color[0],
-            rgbw_color[1],
-            rgbw_color[2],
-            rgbw_color[3],
-        )
-
-        self._slclink.send_not_reliable_message(msg)
+        self._slclink.send_not_reliable_message(f"DMXRGBW:{self._channel}:{r},{g},{b},{w}#")
         self.async_schedule_update_ha_state()
 
     async def async_turn_off(self, **kwargs):
