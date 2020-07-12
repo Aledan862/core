@@ -41,6 +41,7 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Required(CONF_HOST): cv.string,
+                vol.Required("controller"): cv.string,
                 vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
             }
         ),
@@ -59,7 +60,8 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up the Smart Life Comfort component."""
     # Data that you want to share with your platforms
-    controllerip = config[DOMAIN][CONF_HOST]
+    host = config[DOMAIN][CONF_HOST]
+    controllerip = config[DOMAIN]["controller"]
     port = config[DOMAIN][CONF_PORT]
     _LOGGER.info("SLC Host: " + controllerip)
 
@@ -89,7 +91,8 @@ async def async_setup(hass: HomeAssistant, config: dict):
         _LOGGER.error(e)
         return False
 
-    slc = SLCclient(host="192.168.100.158", controllerip=controllerip)
+    # slc = SLCclient(host="192.168.101.39", controllerip=controllerip)
+    slc = SLCclient(host=host, controllerip=controllerip)
 
     async def message_callback(event_type, message):
         if event_type == 2:
