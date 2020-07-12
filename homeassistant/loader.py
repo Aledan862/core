@@ -26,13 +26,10 @@ from typing import (
 )
 
 # Typing imports that create a circular dependency
-# pylint: disable=unused-import
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 CALLABLE_T = TypeVar("CALLABLE_T", bound=Callable)  # pylint: disable=invalid-name
-
-DEPENDENCY_BLACKLIST = {"config"}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +67,7 @@ async def _async_get_custom_components(
         return {}
 
     try:
-        import custom_components
+        import custom_components  # pylint: disable=import-outside-toplevel
     except ImportError:
         return {}
 
@@ -127,6 +124,7 @@ async def async_get_custom_components(
 
 async def async_get_config_flows(hass: "HomeAssistant") -> Set[str]:
     """Return cached list of config flows."""
+    # pylint: disable=import-outside-toplevel
     from homeassistant.generated.config_flows import FLOWS
 
     flows: Set[str] = set()
@@ -204,6 +202,15 @@ class Integration:
         self.pkg_path = pkg_path
         self.file_path = file_path
         self.manifest = manifest
+        manifest["is_built_in"] = self.is_built_in
+
+        if self.dependencies:
+            self._all_dependencies_resolved: Optional[bool] = None
+            self._all_dependencies: Optional[Set[str]] = None
+        else:
+            self._all_dependencies_resolved = True
+            self._all_dependencies = set()
+
         _LOGGER.info("Loaded %s from %s", self.domain, pkg_path)
 
     @property
@@ -242,24 +249,62 @@ class Integration:
         return cast(str, self.manifest.get("documentation"))
 
     @property
+    def issue_tracker(self) -> Optional[str]:
+        """Return issue tracker link."""
+        return cast(str, self.manifest.get("issue_tracker"))
+
+    @property
     def quality_scale(self) -> Optional[str]:
         """Return Integration Quality Scale."""
         return cast(str, self.manifest.get("quality_scale"))
 
     @property
-    def logo(self) -> Optional[str]:
-        """Return Integration Logo."""
-        return cast(str, self.manifest.get("logo"))
-
-    @property
-    def icon(self) -> Optional[str]:
-        """Return Integration Icon."""
-        return cast(str, self.manifest.get("icon"))
-
-    @property
     def is_built_in(self) -> bool:
         """Test if package is a built-in integration."""
         return self.pkg_path.startswith(PACKAGE_BUILTIN)
+
+    @property
+    def all_dependencies(self) -> Set[str]:
+        """Return all dependencies including sub-dependencies."""
+        if self._all_dependencies is None:
+            raise RuntimeError("Dependencies not resolved!")
+
+        return self._all_dependencies
+
+    @property
+    def all_dependencies_resolved(self) -> bool:
+        """Return if all dependencies have been resolved."""
+        return self._all_dependencies_resolved is not None
+
+    async def resolve_dependencies(self) -> bool:
+        """Resolve all dependencies."""
+        if self._all_dependencies_resolved is not None:
+            return self._all_dependencies_resolved
+
+        try:
+            dependencies = await _async_component_dependencies(
+                self.hass, self.domain, self, set(), set()
+            )
+            dependencies.discard(self.domain)
+            self._all_dependencies = dependencies
+            self._all_dependencies_resolved = True
+        except IntegrationNotFound as err:
+            _LOGGER.error(
+                "Unable to resolve dependencies for %s:  we are unable to resolve (sub)dependency %s",
+                self.domain,
+                err.domain,
+            )
+            self._all_dependencies_resolved = False
+        except CircularDependency as err:
+            _LOGGER.error(
+                "Unable to resolve dependencies for %s:  it contains a circular dependency: %s -> %s",
+                self.domain,
+                err.from_domain,
+                err.to_domain,
+            )
+            self._all_dependencies_resolved = False
+
+        return self._all_dependencies_resolved
 
     def get_component(self) -> ModuleType:
         """Return the component."""
@@ -317,7 +362,7 @@ async def async_get_integration(hass: "HomeAssistant", domain: str) -> Integrati
         event.set()
         return integration
 
-    from homeassistant import components
+    from homeassistant import components  # pylint: disable=import-outside-toplevel
 
     integration = await hass.async_add_executor_job(
         Integration.resolve_from_root, hass, components, domain
@@ -418,14 +463,11 @@ def _load_file(
             parts = []
             for part in path.split("."):
                 parts.append(part)
-                white_listed_errors.append(
-                    "No module named '{}'".format(".".join(parts))
-                )
+                white_listed_errors.append(f"No module named '{'.'.join(parts)}'")
 
             if str(err) not in white_listed_errors:
                 _LOGGER.exception(
-                    ("Error loading %s. Make sure all dependencies are installed"),
-                    path,
+                    ("Error loading %s. Make sure all dependencies are installed"), path
                 )
 
     return None
@@ -497,23 +539,18 @@ def bind_hass(func: CALLABLE_T) -> CALLABLE_T:
     return func
 
 
-async def async_component_dependencies(hass: "HomeAssistant", domain: str) -> Set[str]:
-    """Return all dependencies and subdependencies of components.
-
-    Raises CircularDependency if a circular dependency is found.
-    """
-    return await _async_component_dependencies(hass, domain, set(), set())
-
-
 async def _async_component_dependencies(
-    hass: "HomeAssistant", domain: str, loaded: Set[str], loading: Set[str]
+    hass: "HomeAssistant",
+    start_domain: str,
+    integration: Integration,
+    loaded: Set[str],
+    loading: Set[str],
 ) -> Set[str]:
     """Recursive function to get component dependencies.
 
     Async friendly.
     """
-    integration = await async_get_integration(hass, domain)
-
+    domain = integration.domain
     loading.add(domain)
 
     for dependency_domain in integration.dependencies:
@@ -525,11 +562,19 @@ async def _async_component_dependencies(
         if dependency_domain in loading:
             raise CircularDependency(domain, dependency_domain)
 
-        dep_loaded = await _async_component_dependencies(
-            hass, dependency_domain, loaded, loading
-        )
+        loaded.add(dependency_domain)
 
-        loaded.update(dep_loaded)
+        dep_integration = await async_get_integration(hass, dependency_domain)
+
+        if start_domain in dep_integration.after_dependencies:
+            raise CircularDependency(start_domain, dependency_domain)
+
+        if dep_integration.dependencies:
+            dep_loaded = await _async_component_dependencies(
+                hass, start_domain, dep_integration, loaded, loading
+            )
+
+            loaded.update(dep_loaded)
 
     loaded.add(domain)
     loading.remove(domain)

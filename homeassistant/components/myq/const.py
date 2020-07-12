@@ -10,13 +10,7 @@ from homeassistant.const import STATE_CLOSED, STATE_CLOSING, STATE_OPEN, STATE_O
 
 DOMAIN = "myq"
 
-PLATFORMS = ["cover"]
-
-MYQ_DEVICE_TYPE = "device_type"
-MYQ_DEVICE_TYPE_GATE = "gate"
-MYQ_DEVICE_STATE = "state"
-MYQ_DEVICE_STATE_ONLINE = "online"
-
+PLATFORMS = ["cover", "binary_sensor"]
 
 MYQ_TO_HASS = {
     MYQ_STATE_CLOSED: STATE_CLOSED,

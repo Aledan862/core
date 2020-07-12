@@ -1,7 +1,6 @@
 # https://dev.azure.com/home-assistant
 
 trigger:
-  batch: true
   branches:
     include:
     - dev
@@ -16,10 +15,9 @@ schedules:
   branches:
     include:
     - dev
-  always: true
 variables:
   - name: versionWheels
-    value: '1.10.1-3.7-alpine3.11'
+    value: '1.13.0-3.8-alpine3.12'
 resources:
   repositories:
     - repository: azure
@@ -73,4 +71,4 @@ jobs:
           sed -i "s|# bme680|bme680|g" ${requirement_file}
           sed -i "s|# python-gammu|python-gammu|g" ${requirement_file}
         done
-      displayName: 'Prepare requirements files for Hass.io'
+      displayName: 'Prepare requirements files for Home Assistant wheels'

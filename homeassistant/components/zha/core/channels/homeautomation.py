@@ -21,16 +21,12 @@ _LOGGER = logging.getLogger(__name__)
 class ApplianceEventAlerts(ZigbeeChannel):
     """Appliance Event Alerts channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(
     homeautomation.ApplianceIdentification.cluster_id
 )
 class ApplianceIdentification(ZigbeeChannel):
     """Appliance Identification channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(
@@ -39,14 +35,10 @@ class ApplianceIdentification(ZigbeeChannel):
 class ApplianceStatistics(ZigbeeChannel):
     """Appliance Statistics channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(homeautomation.Diagnostic.cluster_id)
 class Diagnostic(ZigbeeChannel):
     """Diagnostic channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(
@@ -83,33 +75,26 @@ class ElectricalMeasurementChannel(ZigbeeChannel):
 
     async def async_initialize(self, from_cache):
         """Initialize channel."""
-        await self.get_attribute_value("active_power", from_cache=from_cache)
-        await self.fetch_config(from_cache)
+        await self.fetch_config(True)
         await super().async_initialize(from_cache)
 
     async def fetch_config(self, from_cache):
         """Fetch config from device and updates format specifier."""
-        divisor = await self.get_attribute_value(
-            "ac_power_divisor", from_cache=from_cache
+        results = await self.get_attributes(
+            [
+                "ac_power_divisor",
+                "power_divisor",
+                "ac_power_multiplier",
+                "power_multiplier",
+            ],
+            from_cache=from_cache,
         )
-        if divisor is None:
-            divisor = await self.get_attribute_value(
-                "power_divisor", from_cache=from_cache
-            )
-            if divisor is None:
-                divisor = 1
-        self._divisor = divisor
-
-        mult = await self.get_attribute_value(
-            "ac_power_multiplier", from_cache=from_cache
+        self._divisor = results.get(
+            "ac_power_divisor", results.get("power_divisor", self._divisor)
         )
-        if mult is None:
-            mult = await self.get_attribute_value(
-                "power_multiplier", from_cache=from_cache
-            )
-            if mult is None:
-                mult = 1
-        self._multiplier = mult
+        self._multiplier = results.get(
+            "ac_power_multiplier", results.get("power_multiplier", self._multiplier)
+        )
 
     @property
     def divisor(self) -> Optional[int]:
@@ -127,5 +112,3 @@ class ElectricalMeasurementChannel(ZigbeeChannel):
 )
 class MeterIdentification(ZigbeeChannel):
     """Metering Identification channel."""
-
-    pass

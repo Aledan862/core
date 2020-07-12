@@ -15,6 +15,7 @@ from homeassistant.const import (
     CONF_URL,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
+    HTTP_BAD_REQUEST,
 )
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -119,24 +120,24 @@ async def async_setup(hass, config):
                     timeout=timeout,
                 ) as response:
 
-                    if response.status < 400:
+                    if response.status < HTTP_BAD_REQUEST:
                         _LOGGER.debug(
-                            "Success. Url: %s. Status code: %d.",
+                            "Success. Url: %s. Status code: %d",
                             response.url,
                             response.status,
                         )
                     else:
                         _LOGGER.warning(
-                            "Error. Url: %s. Status code %d.",
+                            "Error. Url: %s. Status code %d",
                             response.url,
                             response.status,
                         )
 
             except asyncio.TimeoutError:
-                _LOGGER.warning("Timeout call %s.", response.url, exc_info=1)
+                _LOGGER.warning("Timeout call %s", response.url, exc_info=1)
 
             except aiohttp.ClientError:
-                _LOGGER.error("Client error %s.", request_url, exc_info=1)
+                _LOGGER.error("Client error %s", request_url, exc_info=1)
 
         # register services
         hass.services.async_register(DOMAIN, name, async_service_handler)

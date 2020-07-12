@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 def initialise_templates(hass, templates, attribute_templates=None):
     """Initialise templates and attribute templates."""
     if attribute_templates is None:
-        attribute_templates = dict()
+        attribute_templates = {}
     for template in chain(templates.values(), attribute_templates.values()):
         if template is None:
             continue
@@ -23,7 +23,7 @@ def extract_entities(
 ):
     """Extract entity ids from templates and attribute templates."""
     if attribute_templates is None:
-        attribute_templates = dict()
+        attribute_templates = {}
     entity_ids = set()
     if manual_entity_ids is None:
         invalid_templates = []
@@ -46,7 +46,7 @@ def extract_entities(
                 "Template %s '%s' has no entity ids configured to track nor"
                 " were we able to extract the entities to track from the %s "
                 "template(s). This entity will only be able to be updated "
-                "manually.",
+                "manually",
                 device_type,
                 device_name,
                 ", ".join(invalid_templates),
