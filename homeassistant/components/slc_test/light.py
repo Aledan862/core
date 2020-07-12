@@ -98,7 +98,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     _LOGGER.info("SLC Light complete!")
 
 
-class SLCLight(Light):
+class SLCLight(LightEntity):
     """ Provides a SLC light. """
 
     def __init__(self, name, device_id, channel, slclink):
@@ -179,7 +179,7 @@ class SLCLight(Light):
         self.async_schedule_update_ha_state()
 
 
-class SLCRGB(Light):
+class SLCRGB(LightEntity):
     """ Provides a SLC RGB light. """
 
     def __init__(self, name, device_id, channel, slclink, dmxin_channel=0):
@@ -304,15 +304,15 @@ class SLCRGBW(SLCRGB):
                 b = int(b)
                 w = int(w)
 
-        self._slclink.send_not_reliable_message(f"DMXRGBW:{self._channel}:{r},{g},{b},{w}#")
+                self._slclink.send_not_reliable_message(f"DMXRGBW:{self._channel}:{r},{g},{b},{w}#")
 
-        r, g, b = color_util.color_rgbw_to_rgb(r, g, b, w)
-        self._hs_color = color_util.color_RGB_to_hs(r, g, b)
+                r, g, b = color_util.color_rgbw_to_rgb(r, g, b, w)
+                self._hs_color = color_util.color_RGB_to_hs(r, g, b)
 
-        if r == g == b == w == 0:
-            self._state = False
-        else:
-            self._state = True
+                if r == g == b == w == 0:
+                    self._state = False
+                else:
+                    self._state = True
 
         self.async_schedule_update_ha_state()
 
