@@ -2,7 +2,7 @@
 from datetime import timedelta
 import logging
 
-from alarmdecoder import AlarmDecoder
+from adext import AdExt
 from alarmdecoder.devices import SerialDevice, SocketDevice, USBDevice
 from alarmdecoder.util import NoDeviceError
 import voluptuous as vol
@@ -162,7 +162,7 @@ def setup(hass, config):
         if not restart:
             return
         restart = False
-        _LOGGER.warning("AlarmDecoder unexpectedly lost connection.")
+        _LOGGER.warning("AlarmDecoder unexpectedly lost connection")
         hass.add_job(open_connection)
 
     def handle_message(sender, message):
@@ -187,15 +187,15 @@ def setup(hass, config):
 
     controller = False
     if device_type == "socket":
-        host = device.get(CONF_HOST)
-        port = device.get(CONF_DEVICE_PORT)
-        controller = AlarmDecoder(SocketDevice(interface=(host, port)))
+        host = device[CONF_HOST]
+        port = device[CONF_DEVICE_PORT]
+        controller = AdExt(SocketDevice(interface=(host, port)))
     elif device_type == "serial":
-        path = device.get(CONF_DEVICE_PATH)
-        baud = device.get(CONF_DEVICE_BAUD)
-        controller = AlarmDecoder(SerialDevice(interface=path))
+        path = device[CONF_DEVICE_PATH]
+        baud = device[CONF_DEVICE_BAUD]
+        controller = AdExt(SerialDevice(interface=path))
     elif device_type == "usb":
-        AlarmDecoder(USBDevice.find())
+        AdExt(USBDevice.find())
         return False
 
     controller.on_message += handle_message

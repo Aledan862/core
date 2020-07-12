@@ -3,7 +3,7 @@ import logging
 
 import zigpy.zcl.clusters.smartenergy as smartenergy
 
-from homeassistant.const import TIME_HOURS, TIME_SECONDS
+from homeassistant.const import LENGTH_FEET, TIME_HOURS, TIME_SECONDS
 from homeassistant.core import callback
 
 from .. import registries, typing as zha_typing
@@ -17,56 +17,40 @@ _LOGGER = logging.getLogger(__name__)
 class Calendar(ZigbeeChannel):
     """Calendar channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.DeviceManagement.cluster_id)
 class DeviceManagement(ZigbeeChannel):
     """Device Management channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Drlc.cluster_id)
 class Drlc(ZigbeeChannel):
     """Demand Response and Load Control channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.EnergyManagement.cluster_id)
 class EnergyManagement(ZigbeeChannel):
     """Energy Management channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Events.cluster_id)
 class Events(ZigbeeChannel):
     """Event channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.KeyEstablishment.cluster_id)
 class KeyEstablishment(ZigbeeChannel):
     """Key Establishment channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.MduPairing.cluster_id)
 class MduPairing(ZigbeeChannel):
     """Pairing channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Messaging.cluster_id)
 class Messaging(ZigbeeChannel):
     """Messaging channel."""
-
-    pass
 
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Metering.cluster_id)
@@ -78,7 +62,7 @@ class Metering(ZigbeeChannel):
     unit_of_measure_map = {
         0x00: "kW",
         0x01: f"m³/{TIME_HOURS}",
-        0x02: f"ft³/{TIME_HOURS}",
+        0x02: f"{LENGTH_FEET}³/{TIME_HOURS}",
         0x03: f"ccf/{TIME_HOURS}",
         0x04: f"US gal/{TIME_HOURS}",
         0x05: f"IMP gal/{TIME_HOURS}",
@@ -96,8 +80,8 @@ class Metering(ZigbeeChannel):
     ) -> None:
         """Initialize Metering."""
         super().__init__(cluster, ch_pool)
-        self._divisor = None
-        self._multiplier = None
+        self._divisor = 1
+        self._multiplier = 1
         self._unit_enum = None
         self._format_spec = None
 
@@ -114,6 +98,8 @@ class Metering(ZigbeeChannel):
     @callback
     def attribute_updated(self, attrid, value):
         """Handle attribute update from Metering cluster."""
+        if None in (self._multiplier, self._divisor, self._format_spec):
+            return
         super().attribute_updated(attrid, value * self._multiplier / self._divisor)
 
     @property
@@ -123,27 +109,20 @@ class Metering(ZigbeeChannel):
 
     async def fetch_config(self, from_cache):
         """Fetch config from device and updates format specifier."""
-        self._divisor = await self.get_attribute_value("divisor", from_cache=from_cache)
-        self._multiplier = await self.get_attribute_value(
-            "multiplier", from_cache=from_cache
-        )
-        self._unit_enum = await self.get_attribute_value(
-            "unit_of_measure", from_cache=from_cache
-        )
-        fmting = await self.get_attribute_value(
-            "demand_formatting", from_cache=from_cache
+        results = await self.get_attributes(
+            ["divisor", "multiplier", "unit_of_measure", "demand_formatting"],
+            from_cache=from_cache,
         )
 
-        if self._divisor is None or self._divisor == 0:
-            self._divisor = 1
-        if self._multiplier is None or self._multiplier == 0:
-            self._multiplier = 1
-        if self._unit_enum is None:
-            self._unit_enum = 0x7F  # unknown
-        if fmting is None:
-            fmting = 0xF9  # 1 digit to the right, 15 digits to the left
+        self._divisor = results.get("divisor", self._divisor)
+        self._multiplier = results.get("multiplier", self._multiplier)
+        self._unit_enum = results.get("unit_of_measure", 0x7F)  # default to unknown
 
-        r_digits = fmting & 0x07  # digits to the right of decimal point
+        fmting = results.get(
+            "demand_formatting", 0xF9
+        )  # 1 digit to the right, 15 digits to the left
+
+        r_digits = int(fmting & 0x07)  # digits to the right of decimal point
         l_digits = (fmting >> 3) & 0x0F  # digits to the left of decimal point
         if l_digits == 0:
             l_digits = 15
@@ -163,18 +142,12 @@ class Metering(ZigbeeChannel):
 class Prepayment(ZigbeeChannel):
     """Prepayment channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Price.cluster_id)
 class Price(ZigbeeChannel):
     """Price channel."""
 
-    pass
-
 
 @registries.ZIGBEE_CHANNEL_REGISTRY.register(smartenergy.Tunneling.cluster_id)
 class Tunneling(ZigbeeChannel):
     """Tunneling channel."""
-
-    pass

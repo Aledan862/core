@@ -94,10 +94,12 @@ async def async_setup(hass, config):
 
     await component.async_setup(config)
 
-    component.async_register_entity_service(SERVICE_OPEN_COVER, {}, "async_open_cover")
+    component.async_register_entity_service(
+        SERVICE_OPEN_COVER, {}, "async_open_cover", [SUPPORT_OPEN]
+    )
 
     component.async_register_entity_service(
-        SERVICE_CLOSE_COVER, {}, "async_close_cover"
+        SERVICE_CLOSE_COVER, {}, "async_close_cover", [SUPPORT_CLOSE]
     )
 
     component.async_register_entity_service(
@@ -108,22 +110,27 @@ async def async_setup(hass, config):
             )
         },
         "async_set_cover_position",
-    )
-
-    component.async_register_entity_service(SERVICE_STOP_COVER, {}, "async_stop_cover")
-
-    component.async_register_entity_service(SERVICE_TOGGLE, {}, "async_toggle")
-
-    component.async_register_entity_service(
-        SERVICE_OPEN_COVER_TILT, {}, "async_open_cover_tilt"
+        [SUPPORT_SET_POSITION],
     )
 
     component.async_register_entity_service(
-        SERVICE_CLOSE_COVER_TILT, {}, "async_close_cover_tilt"
+        SERVICE_STOP_COVER, {}, "async_stop_cover", [SUPPORT_STOP]
     )
 
     component.async_register_entity_service(
-        SERVICE_STOP_COVER_TILT, {}, "async_stop_cover_tilt"
+        SERVICE_TOGGLE, {}, "async_toggle", [SUPPORT_OPEN | SUPPORT_CLOSE]
+    )
+
+    component.async_register_entity_service(
+        SERVICE_OPEN_COVER_TILT, {}, "async_open_cover_tilt", [SUPPORT_OPEN_TILT]
+    )
+
+    component.async_register_entity_service(
+        SERVICE_CLOSE_COVER_TILT, {}, "async_close_cover_tilt", [SUPPORT_CLOSE_TILT]
+    )
+
+    component.async_register_entity_service(
+        SERVICE_STOP_COVER_TILT, {}, "async_stop_cover_tilt", [SUPPORT_STOP_TILT]
     )
 
     component.async_register_entity_service(
@@ -134,10 +141,14 @@ async def async_setup(hass, config):
             )
         },
         "async_set_cover_tilt_position",
+        [SUPPORT_SET_TILT_POSITION],
     )
 
     component.async_register_entity_service(
-        SERVICE_TOGGLE_COVER_TILT, {}, "async_toggle_tilt"
+        SERVICE_TOGGLE_COVER_TILT,
+        {},
+        "async_toggle_tilt",
+        [SUPPORT_OPEN_TILT | SUPPORT_CLOSE_TILT],
     )
 
     return True
@@ -153,7 +164,7 @@ async def async_unload_entry(hass, entry):
     return await hass.data[DOMAIN].async_unload_entry(entry)
 
 
-class CoverDevice(Entity):
+class CoverEntity(Entity):
     """Representation of a cover."""
 
     @property
@@ -162,7 +173,6 @@ class CoverDevice(Entity):
 
         None is unknown, 0 is closed, 100 is fully open.
         """
-        pass
 
     @property
     def current_cover_tilt_position(self):
@@ -170,7 +180,6 @@ class CoverDevice(Entity):
 
         None is unknown, 0 is closed, 100 is fully open.
         """
-        pass
 
     @property
     def state(self):
@@ -223,12 +232,10 @@ class CoverDevice(Entity):
     @property
     def is_opening(self):
         """Return if the cover is opening or not."""
-        pass
 
     @property
     def is_closing(self):
         """Return if the cover is closing or not."""
-        pass
 
     @property
     def is_closed(self):
@@ -267,7 +274,6 @@ class CoverDevice(Entity):
 
     def set_cover_position(self, **kwargs):
         """Move the cover to a specific position."""
-        pass
 
     async def async_set_cover_position(self, **kwargs):
         """Move the cover to a specific position."""
@@ -275,7 +281,6 @@ class CoverDevice(Entity):
 
     def stop_cover(self, **kwargs):
         """Stop the cover."""
-        pass
 
     async def async_stop_cover(self, **kwargs):
         """Stop the cover."""
@@ -283,7 +288,6 @@ class CoverDevice(Entity):
 
     def open_cover_tilt(self, **kwargs: Any) -> None:
         """Open the cover tilt."""
-        pass
 
     async def async_open_cover_tilt(self, **kwargs):
         """Open the cover tilt."""
@@ -291,7 +295,6 @@ class CoverDevice(Entity):
 
     def close_cover_tilt(self, **kwargs: Any) -> None:
         """Close the cover tilt."""
-        pass
 
     async def async_close_cover_tilt(self, **kwargs):
         """Close the cover tilt."""
@@ -299,7 +302,6 @@ class CoverDevice(Entity):
 
     def set_cover_tilt_position(self, **kwargs):
         """Move the cover tilt to a specific position."""
-        pass
 
     async def async_set_cover_tilt_position(self, **kwargs):
         """Move the cover tilt to a specific position."""
@@ -309,7 +311,6 @@ class CoverDevice(Entity):
 
     def stop_cover_tilt(self, **kwargs):
         """Stop the cover."""
-        pass
 
     async def async_stop_cover_tilt(self, **kwargs):
         """Stop the cover."""
@@ -328,3 +329,14 @@ class CoverDevice(Entity):
             await self.async_open_cover_tilt(**kwargs)
         else:
             await self.async_close_cover_tilt(**kwargs)
+
+
+class CoverDevice(CoverEntity):
+    """Representation of a cover (for backwards compatibility)."""
+
+    def __init_subclass__(cls, **kwargs):
+        """Print deprecation warning."""
+        super().__init_subclass__(**kwargs)
+        _LOGGER.warning(
+            "CoverDevice is deprecated, modify %s to extend CoverEntity", cls.__name__,
+        )

@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, List, Optional
 import aiohttp
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers import event
 from homeassistant.util.dt import utcnow
 
 from .debounce import Debouncer
@@ -30,7 +30,7 @@ class DataUpdateCoordinator:
         logger: logging.Logger,
         *,
         name: str,
-        update_interval: timedelta,
+        update_interval: Optional[timedelta] = None,
         update_method: Optional[Callable[[], Awaitable]] = None,
         request_refresh_debouncer: Optional[Debouncer] = None,
     ):
@@ -62,7 +62,7 @@ class DataUpdateCoordinator:
         self._debounced_refresh = request_refresh_debouncer
 
     @callback
-    def async_add_listener(self, update_callback: CALLBACK_TYPE) -> None:
+    def async_add_listener(self, update_callback: CALLBACK_TYPE) -> Callable[[], None]:
         """Listen for data updates."""
         schedule_refresh = not self._listeners
 
@@ -71,6 +71,13 @@ class DataUpdateCoordinator:
         # This is the first listener, set up interval.
         if schedule_refresh:
             self._schedule_refresh()
+
+        @callback
+        def remove_listener() -> None:
+            """Remove update listener."""
+            self.async_remove_listener(update_callback)
+
+        return remove_listener
 
     @callback
     def async_remove_listener(self, update_callback: CALLBACK_TYPE) -> None:
@@ -84,6 +91,9 @@ class DataUpdateCoordinator:
     @callback
     def _schedule_refresh(self) -> None:
         """Schedule a refresh."""
+        if self.update_interval is None:
+            return
+
         if self._unsub_refresh:
             self._unsub_refresh()
             self._unsub_refresh = None
@@ -92,7 +102,7 @@ class DataUpdateCoordinator:
         # minimizing the time between the point and the real activation.
         # That way we obtain a constant update frequency,
         # as long as the update process takes less than a second
-        self._unsub_refresh = async_track_point_in_utc_time(
+        self._unsub_refresh = event.async_track_point_in_utc_time(
             self.hass,
             self._handle_refresh_interval,
             utcnow().replace(microsecond=0) + self.update_interval,
@@ -163,7 +173,8 @@ class DataUpdateCoordinator:
                 self.name,
                 monotonic() - start,
             )
-            self._schedule_refresh()
+            if self._listeners:
+                self._schedule_refresh()
 
         for update_callback in self._listeners:
             update_callback()

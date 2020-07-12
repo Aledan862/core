@@ -14,6 +14,7 @@ from homeassistant.util.json import load_json, save_json
 from .hue_api import (
     HueAllGroupsStateView,
     HueAllLightsStateView,
+    HueConfigView,
     HueFullStateView,
     HueGroupView,
     HueOneLightChangeView,
@@ -119,6 +120,7 @@ async def async_setup(hass, yaml_config):
     HueAllGroupsStateView(config).register(app, app.router)
     HueGroupView(config).register(app, app.router)
     HueFullStateView(config).register(app, app.router)
+    HueConfigView(config).register(app, app.router)
 
     upnp_listener = UPNPResponderThread(
         config.host_ip_addr,
@@ -172,6 +174,7 @@ class Config:
         self.type = conf.get(CONF_TYPE)
         self.numbers = None
         self.cached_states = {}
+        self._exposed_cache = {}
 
         if self.type == TYPE_ALEXA:
             _LOGGER.warning(
@@ -228,9 +231,9 @@ class Config:
 
         self.entities = conf.get(CONF_ENTITIES, {})
 
-        self._entities_with_hidden_attr_in_config = dict()
+        self._entities_with_hidden_attr_in_config = {}
         for entity_id in self.entities:
-            hidden_value = self.entities[entity_id].get(CONF_ENTITY_HIDDEN, None)
+            hidden_value = self.entities[entity_id].get(CONF_ENTITY_HIDDEN)
             if hidden_value is not None:
                 self._entities_with_hidden_attr_in_config[entity_id] = hidden_value
 
@@ -277,6 +280,24 @@ class Config:
         return entity.attributes.get(ATTR_EMULATED_HUE_NAME, entity.name)
 
     def is_entity_exposed(self, entity):
+        """Cache determine if an entity should be exposed on the emulated bridge."""
+        entity_id = entity.entity_id
+        if entity_id not in self._exposed_cache:
+            self._exposed_cache[entity_id] = self._is_entity_exposed(entity)
+        return self._exposed_cache[entity_id]
+
+    def filter_exposed_entities(self, states):
+        """Filter a list of all states down to exposed entities."""
+        exposed = []
+        for entity in states:
+            entity_id = entity.entity_id
+            if entity_id not in self._exposed_cache:
+                self._exposed_cache[entity_id] = self._is_entity_exposed(entity)
+            if self._exposed_cache[entity_id]:
+                exposed.append(entity)
+        return exposed
+
+    def _is_entity_exposed(self, entity):
         """Determine if an entity should be exposed on the emulated bridge.
 
         Async friendly.

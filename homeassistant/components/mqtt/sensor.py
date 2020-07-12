@@ -35,6 +35,7 @@ from . import (
     MqttEntityDeviceInfo,
     subscription,
 )
+from .debug_info import log_messages
 from .discovery import MQTT_DISCOVERY_NEW, clear_discovery_hash
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,6 +109,11 @@ class MqttSensor(
         self._sub_state = None
         self._expiration_trigger = None
 
+        expire_after = config.get(CONF_EXPIRE_AFTER)
+        if expire_after is not None and expire_after > 0:
+            self._expired = True
+        else:
+            self._expired = None
         device_config = config.get(CONF_DEVICE)
 
         MqttAttributes.__init__(self, config)
@@ -137,12 +143,16 @@ class MqttSensor(
             template.hass = self.hass
 
         @callback
+        @log_messages(self.hass, self.entity_id)
         def message_received(msg):
             """Handle new MQTT messages."""
             payload = msg.payload
             # auto-expire enabled?
             expire_after = self._config.get(CONF_EXPIRE_AFTER)
             if expire_after is not None and expire_after > 0:
+                # When expire_after is set, and we receive a message, assume device is not expired since it has to be to receive the message
+                self._expired = False
+
                 # Reset old trigger
                 if self._expiration_trigger:
                     self._expiration_trigger()
@@ -152,7 +162,7 @@ class MqttSensor(
                 expiration_at = dt_util.utcnow() + timedelta(seconds=expire_after)
 
                 self._expiration_trigger = async_track_point_in_utc_time(
-                    self.hass, self.value_is_expired, expiration_at
+                    self.hass, self._value_is_expired, expiration_at
                 )
 
             if template is not None:
@@ -184,10 +194,10 @@ class MqttSensor(
         await MqttDiscoveryUpdate.async_will_remove_from_hass(self)
 
     @callback
-    def value_is_expired(self, *_):
+    def _value_is_expired(self, *_):
         """Triggered when value is expired."""
         self._expiration_trigger = None
-        self._state = None
+        self._expired = True
         self.async_write_ha_state()
 
     @property
@@ -229,3 +239,12 @@ class MqttSensor(
     def device_class(self) -> Optional[str]:
         """Return the device class of the sensor."""
         return self._config.get(CONF_DEVICE_CLASS)
+
+    @property
+    def available(self) -> bool:
+        """Return true if the device is available and value has not expired."""
+        expire_after = self._config.get(CONF_EXPIRE_AFTER)
+        # pylint: disable=no-member
+        return MqttAvailability.available.fget(self) and (
+            expire_after is None or not self._expired
+        )

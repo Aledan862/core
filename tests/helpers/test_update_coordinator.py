@@ -4,34 +4,49 @@ from datetime import timedelta
 import logging
 
 import aiohttp
-from asynctest import CoroutineMock, Mock
 import pytest
 
 from homeassistant.helpers import update_coordinator
 from homeassistant.util.dt import utcnow
 
+from tests.async_mock import AsyncMock, Mock
 from tests.common import async_fire_time_changed
 
 LOGGER = logging.getLogger(__name__)
 
 
-@pytest.fixture
-def crd(hass):
-    """Coordinator mock."""
-    calls = []
+def get_crd(hass, update_interval):
+    """Make coordinator mocks."""
+    calls = 0
 
     async def refresh():
-        calls.append(None)
-        return len(calls)
+        nonlocal calls
+        calls += 1
+        return calls
 
     crd = update_coordinator.DataUpdateCoordinator(
         hass,
         LOGGER,
         name="test",
         update_method=refresh,
-        update_interval=timedelta(seconds=10),
+        update_interval=update_interval,
     )
     return crd
+
+
+DEFAULT_UPDATE_INTERVAL = timedelta(seconds=10)
+
+
+@pytest.fixture
+def crd(hass):
+    """Coordinator mock with default update interval."""
+    return get_crd(hass, DEFAULT_UPDATE_INTERVAL)
+
+
+@pytest.fixture
+def crd_without_update_interval(hass):
+    """Coordinator mock that never automatically updates."""
+    return get_crd(hass, None)
 
 
 async def test_async_refresh(crd):
@@ -40,27 +55,47 @@ async def test_async_refresh(crd):
     await crd.async_refresh()
     assert crd.data == 1
     assert crd.last_update_success is True
+    # Make sure we didn't schedule a refresh because we have 0 listeners
+    assert crd._unsub_refresh is None
 
     updates = []
 
     def update_callback():
         updates.append(crd.data)
 
-    crd.async_add_listener(update_callback)
-
+    unsub = crd.async_add_listener(update_callback)
     await crd.async_refresh()
+    assert updates == [2]
+    assert crd._unsub_refresh is not None
 
+    # Test unsubscribing through function
+    unsub()
+    await crd.async_refresh()
     assert updates == [2]
 
+    # Test unsubscribing through method
+    crd.async_add_listener(update_callback)
     crd.async_remove_listener(update_callback)
-
     await crd.async_refresh()
-
     assert updates == [2]
 
 
 async def test_request_refresh(crd):
     """Test request refresh for update coordinator."""
+    assert crd.data is None
+    await crd.async_request_refresh()
+    assert crd.data == 1
+    assert crd.last_update_success is True
+
+    # Second time we hit the debonuce
+    await crd.async_request_refresh()
+    assert crd.data == 1
+    assert crd.last_update_success is True
+
+
+async def test_request_refresh_no_auto_update(crd_without_update_interval):
+    """Test request refresh for update coordinator without automatic update."""
+    crd = crd_without_update_interval
     assert crd.data is None
     await crd.async_request_refresh()
     assert crd.data == 1
@@ -82,7 +117,7 @@ async def test_request_refresh(crd):
 )
 async def test_refresh_known_errors(err_msg, crd, caplog):
     """Test raising known errors."""
-    crd.update_method = CoroutineMock(side_effect=err_msg[0])
+    crd.update_method = AsyncMock(side_effect=err_msg[0])
 
     await crd.async_refresh()
 
@@ -95,7 +130,7 @@ async def test_refresh_fail_unknown(crd, caplog):
     """Test raising unknown error."""
     await crd.async_refresh()
 
-    crd.update_method = CoroutineMock(side_effect=ValueError)
+    crd.update_method = AsyncMock(side_effect=ValueError)
 
     await crd.async_refresh()
 
@@ -142,6 +177,37 @@ async def test_update_interval(hass, crd):
 
     # Test we stop updating after we lose last subscriber
     assert crd.data == 2
+
+
+async def test_update_interval_not_present(hass, crd_without_update_interval):
+    """Test update never happens with no update interval."""
+    crd = crd_without_update_interval
+    # Test we don't update without subscriber with no update interval
+    async_fire_time_changed(hass, utcnow() + DEFAULT_UPDATE_INTERVAL)
+    await hass.async_block_till_done()
+    assert crd.data is None
+
+    # Add subscriber
+    update_callback = Mock()
+    crd.async_add_listener(update_callback)
+
+    # Test twice we don't update with subscriber with no update interval
+    async_fire_time_changed(hass, utcnow() + DEFAULT_UPDATE_INTERVAL)
+    await hass.async_block_till_done()
+    assert crd.data is None
+
+    async_fire_time_changed(hass, utcnow() + DEFAULT_UPDATE_INTERVAL)
+    await hass.async_block_till_done()
+    assert crd.data is None
+
+    # Test removing listener
+    crd.async_remove_listener(update_callback)
+
+    async_fire_time_changed(hass, utcnow() + DEFAULT_UPDATE_INTERVAL)
+    await hass.async_block_till_done()
+
+    # Test we stop don't update after we lose last subscriber
+    assert crd.data is None
 
 
 async def test_refresh_recover(crd, caplog):

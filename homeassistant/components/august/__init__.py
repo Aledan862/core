@@ -60,7 +60,7 @@ async def async_request_validation(hass, config_entry, august_gateway):
     # In the future this should start a new config flow
     # instead of using the legacy configurator
     #
-    _LOGGER.error("Access token is no longer valid.")
+    _LOGGER.error("Access token is no longer valid")
     configurator = hass.components.configurator
     entry_id = config_entry.entry_id
 
@@ -90,8 +90,11 @@ async def async_request_validation(hass, config_entry, august_gateway):
     hass.data[DOMAIN][entry_id][TWO_FA_REVALIDATE] = configurator.async_request_config(
         f"{DEFAULT_NAME} ({username})",
         async_august_configuration_validation_callback,
-        description="August must be re-verified. Please check your {} ({}) and enter the verification "
-        "code below".format(login_method, username),
+        description=(
+            "August must be re-verified. "
+            f"Please check your {login_method} ({username}) "
+            "and enter the verification code below"
+        ),
         submit_caption="Verify",
         fields=[
             {"id": VERIFICATION_CODE_KEY, "name": "Verification code", "type": "string"}
@@ -214,11 +217,11 @@ class AugustData(AugustSubscriberMixin):
             await self._api.async_get_doorbells(self._august_gateway.access_token) or []
         )
 
-        self._doorbells_by_id = dict((device.device_id, device) for device in doorbells)
-        self._locks_by_id = dict((device.device_id, device) for device in locks)
-        self._house_ids = set(
+        self._doorbells_by_id = {device.device_id: device for device in doorbells}
+        self._locks_by_id = {device.device_id: device for device in locks}
+        self._house_ids = {
             device.house_id for device in itertools.chain(locks, doorbells)
-        )
+        }
 
         await self._async_refresh_device_detail_by_ids(
             [device.device_id for device in itertools.chain(locks, doorbells)]
@@ -259,13 +262,20 @@ class AugustData(AugustSubscriberMixin):
                 await self._async_update_device_detail(
                     self._locks_by_id[device_id], self._api.async_get_lock_detail
                 )
+                # keypads are always attached to locks
+                if (
+                    device_id in self._device_detail_by_id
+                    and self._device_detail_by_id[device_id].keypad is not None
+                ):
+                    keypad = self._device_detail_by_id[device_id].keypad
+                    self._device_detail_by_id[keypad.device_id] = keypad
             elif device_id in self._doorbells_by_id:
                 await self._async_update_device_detail(
                     self._doorbells_by_id[device_id],
                     self._api.async_get_doorbell_detail,
                 )
             _LOGGER.debug(
-                "async_signal_device_id_update (from detail updates): %s", device_id,
+                "async_signal_device_id_update (from detail updates): %s", device_id
             )
             self.async_signal_device_id_update(device_id)
 
@@ -341,7 +351,7 @@ class AugustData(AugustSubscriberMixin):
             doorbell_detail = self._device_detail_by_id.get(device_id)
             if doorbell_detail is None:
                 _LOGGER.info(
-                    "The doorbell %s could not be setup because the system could not fetch details about the doorbell.",
+                    "The doorbell %s could not be setup because the system could not fetch details about the doorbell",
                     doorbell.device_name,
                 )
             else:
@@ -363,17 +373,17 @@ class AugustData(AugustSubscriberMixin):
             lock_detail = self._device_detail_by_id.get(device_id)
             if lock_detail is None:
                 _LOGGER.info(
-                    "The lock %s could not be setup because the system could not fetch details about the lock.",
+                    "The lock %s could not be setup because the system could not fetch details about the lock",
                     lock.device_name,
                 )
             elif lock_detail.bridge is None:
                 _LOGGER.info(
-                    "The lock %s could not be setup because it does not have a bridge (Connect).",
+                    "The lock %s could not be setup because it does not have a bridge (Connect)",
                     lock.device_name,
                 )
             elif not lock_detail.bridge.operative:
                 _LOGGER.info(
-                    "The lock %s could not be setup because the bridge (Connect) is not operative.",
+                    "The lock %s could not be setup because the bridge (Connect) is not operative",
                     lock.device_name,
                 )
             else:
