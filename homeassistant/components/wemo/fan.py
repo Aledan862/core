@@ -129,7 +129,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
     # Register service(s)
     hass.services.async_register(
-        WEMO_DOMAIN, SERVICE_SET_HUMIDITY, service_handle, schema=SET_HUMIDITY_SCHEMA,
+        WEMO_DOMAIN,
+        SERVICE_SET_HUMIDITY,
+        service_handle,
+        schema=SET_HUMIDITY_SCHEMA,
     )
 
     hass.services.async_register(
@@ -245,6 +248,11 @@ class WemoHumidifier(FanEntity):
         registry = self.hass.data[WEMO_DOMAIN]["registry"]
         await self.hass.async_add_executor_job(registry.register, self.wemo)
         registry.on(self.wemo, None, self._subscription_callback)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Wemo humidifier removed from hass."""
+        registry = self.hass.data[WEMO_DOMAIN]["registry"]
+        await self.hass.async_add_executor_job(registry.unregister, self.wemo)
 
     async def async_update(self):
         """Update WeMo state.
