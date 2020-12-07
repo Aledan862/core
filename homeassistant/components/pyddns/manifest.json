@@ -1,0 +1,6 @@
+{
+  "domain": "slc_dyndns",
+  "name": "SLC_DDNS",
+  "documentation": "https://www.home-assistant.io/integrations/no_ip",
+  "codeowners": ["@aledan862"]
+}

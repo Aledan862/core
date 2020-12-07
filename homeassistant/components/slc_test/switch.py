@@ -21,10 +21,10 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     switches = []
     # Assign configuration variables.
     # The configuration check takes care they are present.
-    host = hass.data[DOMAIN][CONF_HOST]
+    host = hass.data[DOMAIN]["controller"]
     slclink = SLCLink(host)
     # generate a default set of switches
-    for channel in range(1, 24):
+    for channel in range(1, 25):
         name = "DO" + str(channel)
         new_switch = SLCSwitch(name, channel, slclink)
         hass.bus.async_listen(SLC_SYNC, new_switch.event_handler)

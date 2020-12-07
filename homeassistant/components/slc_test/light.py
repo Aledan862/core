@@ -13,7 +13,7 @@ import homeassistant.helpers.config_validation as cv
 # Import the device class from the component that you want to support
 from homeassistant.const import CONF_DEVICES, CONF_NAME, CONF_HOST
 from homeassistant.components.light import (
-    Light,
+    LightEntity,
     ATTR_BRIGHTNESS,
     ATTR_HS_COLOR,
     SUPPORT_COLOR,
@@ -67,7 +67,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     lights = []
     # Assign configuration variables.
     # The configuration check takes care they are present.
-    host = hass.data[DOMAIN][CONF_HOST]
+    host = hass.data[DOMAIN]["controller"]
 
     slclink = SLCLink(host)
 
